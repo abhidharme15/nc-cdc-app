@@ -1,0 +1,106 @@
+version: '3.3'
+services:
+  postgres:
+    image: debezium/example-postgres:1.9
+    container_name: postgres
+    ports:
+      - 5432:5432
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=exampledb
+  
+  mongodb:
+    image: quay.io/debezium/example-mongodb:2.0
+    container_name: mongodb
+    ports:
+     - 27017:27017
+    environment:
+     - MONGODB_USER=debezium
+     - MONGODB_PASSWORD=dbz
+
+  # Zookeeper, single node
+  zookeeper:
+    image: wurstmeister/zookeeper:latest
+    container_name: zookeeper
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+    ports:
+      - 2181:2181
+      - 2888:2888
+      - 3888:3888
+
+  # kafka single node
+  kafka:
+    image: wurstmeister/kafka:latest
+    container_name: kafka
+    restart: "no"
+    links:
+      - zookeeper
+    ports:
+      - 9092:9092
+    environment:
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: INTERNAL://:29092,EXTERNAL://:9092
+      KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:29092,EXTERNAL://localhost:9092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      #https://github.com/wurstmeister/kafka-docker/issues/553
+
+  #kafdrop for topic/msg visualization
+  kafdrop:
+    image: obsidiandynamics/kafdrop
+    container_name: kafdrop
+    restart: "no"
+    environment:
+      KAFKA_BROKERCONNECT: "kafka:29092"
+      JVM_OPTS: "-Xms16M -Xmx512M -Xss180K -XX:-TieredCompilation -XX:+UseStringDeduplication -noverify"
+    ports:
+      - 9000:9000
+    depends_on:
+      - kafka
+
+  # debezium connector
+  kconnect:
+    image: debezium/connect-jdbc:2.0
+    container_name: kconnect
+    build:
+      context: debezium-jdbc
+      args:
+        DEBEZIUM_VERSION: 2.0
+    ports:
+     - 8083:8083
+    links:
+     - kafka
+     - mongodb
+     - postgres
+    environment:
+     - BOOTSTRAP_SERVERS=kafka:29092
+     - GROUP_ID=1
+     - CONFIG_STORAGE_TOPIC=my_connect_configs
+     - OFFSET_STORAGE_TOPIC=my_connect_offsets
+     - STATUS_STORAGE_TOPIC=my_source_connect_statuses
+    links:
+      - zookeeper
+      - postgres
+      - mongodb
+    depends_on:
+      - kafka
+      - zookeeper
+      - postgres
+      - mongodb
+
+  # debezium connector
+  nc-cdc-app:
+    image: abhidharme/nc-cdc-app:latest
+    container_name: nc-cdc-app
+    ports:
+      - 8081:8081
+    depends_on:
+      - kafka
+      - zookeeper
+      - postgres
+      - mongodb
+      - kconnect
