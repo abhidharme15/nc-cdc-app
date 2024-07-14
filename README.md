@@ -1,4 +1,10 @@
-# A guide to setup nc-cdc-app
+# Up and running with CDC (Change Data Capture) using Debezium
+
+## Overview
+If we consider requirement such as migrating data from source database to target database then CDC using debezium could be an ideal choice rather than DBlink. In this particular example 
+source DB is MongoDB and target DB is Postgres. Debezium tool will make use of Kafka to capture the changes from source DB to target DB.
+
+## Steps to setup nc-cdc-app
 
 ```shell
 # Build the application
